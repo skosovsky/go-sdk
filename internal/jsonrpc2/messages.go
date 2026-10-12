@@ -238,8 +238,7 @@ func DecodeMessage(data []byte) (Message, error) {
 const maxIDNumberBytes = 128
 
 // DecodeID decodes a JSON-RPC request identity without converting numeric IDs
-// through float64. It is internal to the SDK and shared with MCP cancellation
-// decoding.
+// through float64. Numeric IDs use the same parser as MakeID.
 func DecodeID(raw json.RawMessage) (ID, error) {
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		return ID{}, nil

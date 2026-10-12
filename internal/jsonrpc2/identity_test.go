@@ -6,8 +6,10 @@ package jsonrpc2
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -200,4 +202,48 @@ func mustDecodeIdentityMessage(t *testing.T, wire string) Message {
 		t.Fatal(err)
 	}
 	return msg
+}
+
+// Exercise the shared numeric grammar through both public-value and wire paths.
+func TestNumericIdentityParserConsistency(t *testing.T) {
+	tests := []struct {
+		name, raw string
+		want      int64
+		invalid   bool
+	}{
+		{name: "limit", raw: "1." + strings.Repeat("0", 126), want: 1},
+		{name: "over limit", raw: "1." + strings.Repeat("0", 127), invalid: true},
+		{name: "huge zero exponent", raw: "0e" + strings.Repeat("9", 126)},
+		{name: "huge negative zero exponent", raw: "-0e-" + strings.Repeat("9", 124)},
+		{name: "underflow", raw: "1e-999999999", invalid: true},
+		{name: "max exponent form", raw: "92233720368547758070e-1", want: 9223372036854775807},
+		{name: "null is not a number", raw: "null", invalid: true},
+		{name: "string is not a number", raw: `"1"`, invalid: true},
+		{name: "leading plus", raw: "+1", invalid: true},
+		{name: "leading zero", raw: "01", invalid: true},
+		{name: "missing fraction", raw: "1.", invalid: true},
+		{name: "missing exponent", raw: "1e", invalid: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange.
+			value := json.Number(tt.raw)
+			// Act.
+			id, err := MakeID(value)
+			// Assert.
+			if tt.invalid {
+				if !errors.Is(err, ErrParse) {
+					t.Fatalf("MakeID error = %v, want ErrParse", err)
+				}
+				return
+			}
+			if err != nil || id.Raw() != tt.want {
+				t.Fatalf("MakeID = %v, %v; want %d", id.Raw(), err, tt.want)
+			}
+			wireID, err := DecodeID(json.RawMessage(tt.raw))
+			if err != nil || wireID != id {
+				t.Fatalf("DecodeID = %v, %v; want %v", wireID.Raw(), err, id.Raw())
+			}
+		})
+	}
 }
