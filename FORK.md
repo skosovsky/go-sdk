@@ -10,13 +10,15 @@ Included patches (original authors and source commits retained):
 - [#1253](https://github.com/modelcontextprotocol/go-sdk/pull/1253), `8beb4c65e0c03e7ef0932599182797abeb4bc293`: bounded decimal/exponent parser and regression coverage for response correlation and adjacent large IDs.
 - [#1390](https://github.com/modelcontextprotocol/go-sdk/pull/1390), `f5811a6c02965f8373849a06199d06b693b307e7`: bind cancellation to the active request before the read loop advances and its ID can be reused.
 
+- [#1392](https://github.com/modelcontextprotocol/go-sdk/pull/1392), `4779e9b`: return JSON-RPC -32600 with explicit null ID for rejected single requests; continue IO reads iteratively. See [#1391](https://github.com/modelcontextprotocol/go-sdk/issues/1391).
+
 ## Integration decisions
 
 The parser from #1253 replaces the overlapping big.Rat implementation from #1375. Both wire IDs and `MakeID(json.Number)` use this parser. Cancellation continues through `CancelledParams` and `MakeID`, preserving upstream reason/cause propagation and metadata behavior. Tests from #1253 are adapted to that path and the current logger requirement.
 
 Numeric IDs must be integral signed int64 values; decimal and exponent forms are accepted when exact. Numeric lexemes are limited to 128 bytes. String IDs retain their separate identity and are not subject to this numeric bound. Decoded numeric `CancelledParams.RequestID` values are `json.Number`; metadata numbers retain their existing representation. Legacy explicit `MakeID(float64)` behavior is unchanged; callers requiring exact identities should pass `json.Number` or use `Int64ID`.
 
-This integration does not include additional invalid-request error framing, STDIO recovery, or float64 hardening from application-specific dependency exception proposals. It does not by itself establish application migration acceptance.
+Rejected single request IDs now receive HTTP 400 application/json or an IO error response with JSON-RPC -32600 and explicit `id:null`. IO reads continue iteratively after rejection. The upstream patch also covers invalid boolean/object/array IDs; fork-specific tests cover fractional, out-of-range, extreme exponent, and oversized numeric IDs. This adapts the proposed numeric-only framing patch without changing legacy batch behavior. Malformed JSON syntax recovery and explicit float64 hardening remain out of scope. Application migration acceptance still requires application-level checks.
 
 ## Validation
 

@@ -23,7 +23,7 @@ type invalidIDWriter struct{ bytes.Buffer }
 func (*invalidIDWriter) Close() error { return nil }
 
 func TestInvalidRequestIDHTTP(t *testing.T) {
-	for _, id := range []string{"true", "{}", "[]"} {
+	for _, id := range []string{"true", "{}", "[]", "1.5", "9223372036854775808", "-9223372036854775809", "1e100000000", "0." + strings.Repeat("0", 127)} {
 		// Arrange.
 		calls := 0
 		server := NewServer(&Implementation{Name: "synthetic", Version: "test"}, nil)
@@ -54,7 +54,7 @@ func TestInvalidRequestIDHTTP(t *testing.T) {
 
 func TestInvalidRequestIDIORecovery(t *testing.T) {
 	// Arrange: many invalid frames followed by a valid request.
-	data := strings.Repeat(`{"jsonrpc":"2.0","id":true,"method":"ping"}`+"\n", 1000) + `{"jsonrpc":"2.0","id":7,"method":"ping"}` + "\n"
+	data := strings.Repeat(`{"jsonrpc":"2.0","id":1.5,"method":"ping"}`+"\n", 1000) + `{"jsonrpc":"2.0","id":9007199254740993,"method":"ping"}` + "\n"
 	writer := &invalidIDWriter{}
 	conn := newIOConn(rwc{rc: io.NopCloser(strings.NewReader(data)), wc: writer})
 	t.Cleanup(func() { conn.Close() })
@@ -66,7 +66,7 @@ func TestInvalidRequestIDIORecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.(*jsonrpc.Request).ID.Raw() != int64(7) {
+	if message.(*jsonrpc.Request).ID.Raw() != int64(9007199254740993) {
 		t.Fatal("valid ID lost")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(writer.Bytes()))
